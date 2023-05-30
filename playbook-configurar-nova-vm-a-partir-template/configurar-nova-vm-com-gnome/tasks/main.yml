@@ -1,0 +1,59 @@
+- name: Instala pacotes do grupo "Server with GUI"
+  ansible.builtin.yum:
+    name: "@Server with GUI"
+    state: present
+
+- name: Instala pacotes adicionais
+  yum:
+    name:
+      - xterm*
+      - xorg*
+      - xauth
+      - mesa*
+    state: present
+
+- name: Adiciona usuário aos grupos
+  user:
+    name: "{{ usuario_cofre }}"
+    groups:
+      - games
+      - video
+      - dbus
+      - users
+      - audio
+    append: yes
+
+- name: Configura sshd
+  blockinfile:
+    path: /etc/ssh/sshd_config
+    block: |
+      X11UseLocalhost no
+      AddressFamily inet
+      X11Forwarding yes
+  notify: Reiniciar sshd
+
+- name: Reinicia sshd
+  service:
+    name: sshd
+    state: restarted
+  notify: reinicia ssh
+
+- name: Configura nível de inicialização
+  command: systemctl set-default multi-user
+
+- name: Copia arquivo repos.pkla
+  copy:
+    src: conf/repos.pkla
+    dest: /etc/polkit-1/localauthority/50-local.d/
+
+- name: Altera entrada em /etc/pam.d/passwd
+  lineinfile:
+    path: /etc/pam.d/passwd
+    regexp: '^(-password\s+optional\s+pam_gnome_keyring.so\s+)use_authtok'
+    line: '\1'
+
+- name: Reinicia serviço polkit
+  systemd:
+    name: polkit
+    state: restarted
+  notify: reinicia polkit

@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  author: Robson Berthelsen
+  description: Role para configurar uma nova máquina utilizando o template pre-configurado
+  license: GNU
+  min_ansible_version: 2.9
+  platforms:
+    - name: Oracle Linux
+      versions:
+        - 8
+        - 9
+    - name: Red Hat Enterprise Edition
+      versions:
+        - 8
+        - 9
+  dependencies:
+    - { role: common }
+

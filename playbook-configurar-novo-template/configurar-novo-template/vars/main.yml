@@ -1,0 +1,4 @@
+nova_maquina: "template"
+ip_producao: "10.150.2.34/27"
+subscription_pool: "8a82c49481811a8e0181ac59bdf40239"
+subscription_user: "unesadti"

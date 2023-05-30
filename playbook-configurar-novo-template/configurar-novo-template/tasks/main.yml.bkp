@@ -1,0 +1,136 @@
+- name: Inserir domínios e DNS
+  lineinfile:
+    path: /etc/resolv.conf
+    line: "{{ item }}"
+  with_items:
+    - "search estacio.rj.br"
+    - "nameserver 10.150.51.2"
+    - "nameserver 10.150.51.3"
+
+- name: Removing old KexAlgorithms entry from the sshd configuration file
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^KexAlgorithms'
+
+- name: Removing old Ciphers entry from the sshd configuration file
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^Ciphers'
+
+- name: Removing old MACs entry from the sshd configuration file
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^MACs'
+
+# Add the new entries to the end of the sshd_config file
+- name: Adding new SSH Ciphers entry to the [sshd_config] file
+  shell: echo "Ciphers aes128-ctr,aes192-ctr,aes256-ctr" >> /etc/ssh/sshd_config
+
+- name: Adding new SSH KexAlgorithms entry to the [sshd_config] file
+  shell: echo "KexAlgorithms ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256" >> /etc/ssh/sshd_config
+
+- name: Adding new SSH MACs entry to the [sshd_config] file
+  shell: echo "MACs hmac-sha2-256,hmac-sha2-512" >> /etc/ssh/sshd_config
+
+# Restart SSH Service
+- name: Restarting sshd.service on {{ ansible_fqdn }}
+  service:
+    name: sshd
+    state: restarted
+
+- name: Copiar arquivos de banner
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  with_items:
+    - { src: "files/Banner/YDUQS.txt", dest: "/etc/YDUQS.txt", mode: "0644" }
+    - { src: "files/Banner/server-comments", dest: "/etc/server-comments", mode: "0644" }
+    - { src: "files/Banner/motd", dest: "/etc/motd", mode: "0644" }
+    - { src: "files/Banner/sysinfo", dest: "/usr/local/bin/sysinfo", mode: "0755" }
+
+- name: Configurar /etc/profile
+  blockinfile:
+    path: /etc/profile
+    block: |
+      # SYSTEM INFORMATION
+      [ "$UID" -ge "500" ] && /usr/local/bin/sysinfo
+
+- name: Cria o diretório /opt/ds_agent se não existir
+  ansible.builtin.file:
+    path: /opt/ds_agent
+    state: directory
+
+- name: Copia arquivos *.der para /opt/ds_agent
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /opt/ds_agent/
+  with_fileglob:
+    - "files/Chaves_trendmicro/*.der"
+
+- name: Fazer subscrição na Red Hat
+  command: "{{ item }}"
+  when: ansible_distribution == 'RedHat'
+  with_items:
+    - "subscription-manager register --username {{ subscription_user }} --password {{ subscription_pass }}"
+    - "subscription-manager attach --pool='{{ subscription_pool }}'"
+
+- name: Atualizar sistema
+  yum:
+    name: '*'
+    state: latest
+
+- name: Cria novo usuário _nessus
+  ansible.builtin.user:
+    name: '_nessus'
+    comment: "Usuário do _nessus"
+    password: "{{ '_nessus_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario do Nessus
+  lineinfile:
+    path: /etc/sudoers.d/_nessus
+    line: '_nessus ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Cria novo usuário linux.svcnow
+  ansible.builtin.user:
+    name: 'linux.svcnow'
+    comment: "Usuário do Service Now"
+    password: "{{ 'linux.svcnow_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario do Service Now no sudo
+  lineinfile:
+    path: /etc/sudoers.d/linux.svcnow
+    line: 'linux.svcnow ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Valida includedir no /etc/sudoers
+  lineinfile:
+    dest: /etc/sudoers
+    line: "#includedir /etc/sudoers.d"
+    state: present
+    validate: "/usr/sbin/visudo -cf %s"
+
+- name: Remover subscrição na Red Hat
+  command: "{{ item }}"
+  when: ansible_distribution == 'RedHat'
+  with_items:
+    - "subscription-manager remove --all"
+    - "subscription-manager unregister"
+    - "subscription-manager clean"
+

@@ -1,0 +1,115 @@
+#!/bin/bash
+
+######################################################################
+#
+#	 ______   ______ ___ _   _ _____ ___
+#	/ ___\ \ / / ___|_ _| \ | |  ___/ _ \
+#	\___ \\ V /\___ \| ||  \| | |_ | | | |
+#	 ___) || |  ___) | || |\  |  _|| |_| |
+#	|____/ |_| |____/___|_| \_|_|   \___/
+#
+#	by Dante De Conti Neto (dante.conti@yduqs.com.br)
+#
+
+SEP="##### "
+
+VERSION="20221128.01"
+USER=$(whoami)
+HOSTNAME=$(echo ${HOSTNAME})
+DATE=$(date -R)
+UPTIME=$(uptime | sed -e 's/^[ ]*//g')
+IPS=$(hostname --all-ip-addresses 2>/dev/null)
+[ -z "$IPS" ] && IPS=$(hostname --ip-address 2>/dev/null)
+KERNEL=$(uname -o)\ $(uname -r)\ $(uname -i)
+
+while getopts "::m" OPT;
+do
+	case "$OPT" in
+        	"m") MOTD=`[ -f "/etc/motd" ] && cat /etc/motd`
+	esac
+done
+
+if [ -f "/etc/system-release" ] ;
+then
+
+        RELEASE=$(cat /etc/system-release)
+
+else
+
+        if [ -f "/etc/os-release" ] ;
+        then
+
+                RELEASE=$(grep ^PRETTY /etc/os-release | awk -F \" {'print $2'})
+
+        else
+
+                if [ -f "/etc/redhat-release" ] ;
+                then
+
+                        RELEASE=$(cat /etc/redhat-release)
+
+                else
+
+                        RELEASE="Unknow OS Release"
+
+                fi
+        fi
+
+fi
+
+PRODUCT_NAME=$(cat /sys/devices/virtual/dmi/id/product_name 2> /dev/null)
+MANUFACTURER=$(cat /sys/devices/virtual/dmi/id/sys_vendor 2> /dev/null)
+CPU_MODEL=$(lscpu 2>/dev/null | grep "^Model name" | awk -F "Model name: " {'print $2'} | tr -s '[:space:]' | sed -e 's/^[ ]*//g')
+[ -z "$CPU_MODEL" ] &&  CPU_MODEL=$(cat /proc/cpuinfo | grep "model name" | tail -1 | awk -F \: {'print $2'} | tr -s '[:space:]' | sed -e 's/^[ ]*//g')
+CPU_TOTAL=$(lscpu 2>/dev/null | grep "^CPU(s):" | tr -s '[:space:]' | awk {'print $2'})
+[ -z "$CPU_TOTAL" ] && CPU_TOTAL=$(cat /proc/cpuinfo | grep processor | wc -l)
+
+if [ -f "/usr/bin/free" ] ;
+then
+
+	/usr/bin/free -h &>/dev/null
+	RETVAL=$?
+	
+	if [ $RETVAL -eq 0 ] ;
+
+	then
+
+		MEMORY_TOTAL=$(/usr/bin/free -h | grep "Mem:" | awk {'print $2'})
+		MEMORY_FREE=$(/usr/bin/free -h | grep "Mem:" | awk {'print $4'})
+
+		SWAP_TOTAL=$(/usr/bin/free -h | grep "Swap:" | awk {'print $2'})
+		SWAP_FREE=$(/usr/bin/free -h | grep "Swap:" | awk {'print $4'})
+
+	fi
+
+fi
+
+if [ -z "$MEMORY_TOTAL" ] || [ -z "$SWAP_TOTAL" ] ;
+
+then
+
+	MEMORY_TOTAL=$(cat /proc/meminfo | grep -e ^MemTotal | awk -F \: {'print $2'} | sed -e 's/^[ ]*//g')
+	MEMORY_FREE=$(cat /proc/meminfo | grep -e ^MemFree | awk -F \: {'print $2'} | sed -e 's/^[ ]*//g')
+
+	SWAP_TOTAL=$(cat /proc/meminfo | grep -e ^SwapTotal | awk -F \: {'print $2'} | sed -e 's/^[ ]*//g')
+	SWAP_FREE=$(cat /proc/meminfo | grep -e ^SwapFree | awk -F \: {'print $2'} | sed -e 's/^[ ]*//g')
+
+fi
+
+DISK=$(df -hT | grep -v tmpfs)
+
+[ -n "$MOTD" ] && echo -e "$MOTD"
+[ -n "$DATE" ] && echo -e "${SEP}${DATE}"
+[ -n "$USER" ] || [ -n "$HOSTNAME" ] || [ -n "$IPS" ]&& echo -e "${SEP}Welcome ${USER} to ${HOSTNAME} - ${IPS}"
+[ -f "/etc/server-comments" ] && cat /etc/server-comments | while read LINE ; do  echo -e "${SEP}${LINE}";  done
+[ -n "$UPTIME" ] && echo -e "${SEP}${UPTIME}\n"
+[ -n "$RELEASE" ] && echo -e "${SEP}Release: ${RELEASE}"
+[ -n "$KERNEL" ] && echo -e "${SEP}Kernel: ${KERNEL}"
+[ -n "$PRODUCT_NAME" ] || [ -n "$MANUFACTURER" ] && echo -e "${SEP}Produto: ${PRODUCT_NAME} - ${MANUFACTURER}"
+[ -n "$CPU_MODEL" ] || [ -n "$CPU_TOTAL" ] && echo -e "${SEP}CPU: ${CPU_MODEL} (x${CPU_TOTAL})"
+[ -n "MEMORY_TOTAL" ] && [ -n "$MEMORY_FREE" ] && echo -e "${SEP}Memory (total/free): ${MEMORY_TOTAL}/${MEMORY_FREE}"
+[ -n "SWAP_TOTAL" ] && [ -n "$SWAP_FREE" ] && echo -e "${SEP}Swap (total/free): ${SWAP_TOTAL}/${SWAP_FREE}"
+[ -n "$DISK" ] && echo -e "\n${SEP}Disk:\n${DISK}\n"
+[ -n "$VERSION" ] && echo -e "${SEP}by sysinfo ${VERSION}"
+
+# EOF

@@ -1,0 +1,14 @@
+---
+- name: Reinicia ssh
+  systemd:
+    name: sshd
+    state: restarted
+  listen: reinicia ssh
+
+- name: Reinicia serviço polkit
+  systemd:
+    name: polkit
+    state: restarted
+  listen: reinicia polkit
+...
+

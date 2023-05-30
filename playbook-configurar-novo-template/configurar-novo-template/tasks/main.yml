@@ -1,0 +1,195 @@
+- name: Inserir domínios e DNS
+  lineinfile:
+    path: /etc/resolv.conf
+    line: "{{ item }}"
+  with_items:
+    - "search estacio.rj.br"
+    - "nameserver 10.150.51.2"
+    - "nameserver 10.150.51.3"
+
+- name: Remove KexAlgorithms antigos do arquivo de configuracao sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^KexAlgorithms'
+
+- name: Remove cifras antigas do arquivo de configuracao sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^Ciphers'
+
+- name: Remove MACs antigas do arquivo de configuracao sshd_config
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    state: absent
+    regexp: '^MACs'
+
+- name: Adiciona nova entrada para as cifras no arquivo sshd_config
+  shell: echo "Ciphers aes128-ctr,aes192-ctr,aes256-ctr" >> /etc/ssh/sshd_config
+
+- name: Adiciona nova SSH KexAlgorithms no arquivo sshd_config
+  shell: echo "KexAlgorithms ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,diffie-hellman-group-exchange-sha256,diffie-hellman-group16-sha512,diffie-hellman-group18-sha512,diffie-hellman-group14-sha256" >> /etc/ssh/sshd_config
+
+- name: Adiciona novas entradas MACs no sshd_confige
+  shell: echo "MACs hmac-sha2-256,hmac-sha2-512" >> /etc/ssh/sshd_config
+
+- name: Configura o sshd_config conforme SI
+  lineinfile:
+    path: "/etc/ssh/sshd_config"
+    regex: "^(#)?{{item.key}}"
+    line: "{{item.key}} {{item.value}}"
+    state: present
+  loop:
+    - { key: "LogLevel", value: "INFO" }
+    - { key: "LoginGraceTime", value: "60" }
+    - { key: "PermitRootLogin", value: "no" }
+    - { key: "MaxAuthTries", value: "4"}
+    - { key: "MaxSessions", value: "4" }
+    - { key: "PasswordAuthentication", value: "no" } 
+    - { key: "IgnoreRhosts", value: "yes" }
+    - { key: "PermitEmptyPasswords", value: "no" }
+    - { key: "UsePAM", value: "yes" }
+    - { key: "PermitUserEnvironment", value: "no" }
+    - { key: "ClientAliveInterval", value: "60" }
+    - { key: "ClientAliveCountMax", value: "3" }
+    - { key: "MaxStartups", value: "10:30:60" }
+  notify:
+    - restart sshd
+
+- name: Copiar arquivos de banner
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  with_items:
+    - { src: "files/Banner/YDUQS.txt", dest: "/etc/YDUQS.txt", mode: "0644" }
+    - { src: "files/Banner/server-comments", dest: "/etc/server-comments", mode: "0644" }
+    - { src: "files/Banner/motd", dest: "/etc/motd", mode: "0644" }
+    - { src: "files/Banner/sysinfo", dest: "/usr/local/bin/sysinfo", mode: "0755" }
+
+- name: Configurar /etc/profile
+  blockinfile:
+    path: /etc/profile
+    block: |
+      # SYSTEM INFORMATION
+      [ "$UID" -ge "500" ] && /usr/local/bin/sysinfo
+
+- name: Cria o diretório /opt/ds_agent se não existir
+  ansible.builtin.file:
+    path: /opt/ds_agent
+    state: directory
+
+- name: Copia arquivos *.der para /opt/ds_agent
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: /opt/ds_agent/
+  with_fileglob:
+    - "files/Chaves_trendmicro/*.der"
+
+- name: Fazer subscrição na Red Hat
+  command: "{{ item }}"
+  when: ansible_distribution == 'RedHat'
+  with_items:
+    - "subscription-manager register --username {{ subscription_user }} --password {{ subscription_pass }}"
+    - "subscription-manager attach --pool='{{ subscription_pool }}'"
+
+- name: Atualizar sistema
+  yum:
+    name: '*'
+    state: latest
+
+- name: Cria novo usuário _nessus
+  ansible.builtin.user:
+    name: '_nessus'
+    comment: "Usuário do _nessus"
+    password: "{{ '_nessus_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario do Nessus
+  lineinfile:
+    path: /etc/sudoers.d/_nessus
+    line: '_nessus ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Cria novo usuário linux.svcnow
+  ansible.builtin.user:
+    name: 'linux.svcnow'
+    comment: "Usuário do Service Now"
+    password: "{{ 'linux.svcnow_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario do Service Now no sudo
+  lineinfile:
+    path: /etc/sudoers.d/linux.svcnow
+    line: 'linux.svcnow ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Cria novo usuário Lumen.cofre
+  ansible.builtin.user:
+    name: 'lumen.cofre'
+    comment: "Usuário do Cofre Cirion"
+    password: "{{ 'lumen.cofre_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario lumen.cofre no sudo
+  lineinfile:
+    path: /etc/sudoers.d/lumen.cofre
+    line: 'lumen.cofre ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Cria novo usuário pmp.cirion
+  ansible.builtin.user:
+    name: 'pmp.cirion'
+    comment: "Usuário de contingencia do cofre Cirion"
+    password: "{{ 'pmp.cirion_pass' | password_hash('sha512', 'abcd') }}"
+    shell: /bin/bash
+    state: present
+
+- name: Adiciona usuario pmp.cirion no sudo
+  lineinfile:
+    path: /etc/sudoers.d/linux.svcnow
+    line: 'pmp.cirion ALL=(ALL) NOPASSWD: ALL'
+    state: present
+    mode: 0440
+    create: yes
+    validate: 'visudo -cf %s'
+
+- name: Valida includedir no /etc/sudoers
+  lineinfile:
+    dest: /etc/sudoers
+    line: "#includedir /etc/sudoers.d"
+    state: present
+    validate: "/usr/sbin/visudo -cf %s"
+
+- name: Adiciona usuário do cofre no AllowUsers do ssh
+  ansible.builtin.lineinfile:
+    dest: /etc/ssh/sshd_config
+    line: "AllowUsers _nessus linux.svcnow lumen.cofre ansible pmp.cirion"
+    state: present
+    insertafter: 'Subsystem'
+    validate: '/usr/sbin/sshd -T -f %s'
+  notify: restart sshd
+
+- name: Remover subscrição na Red Hat
+  command: "{{ item }}"
+  when: ansible_distribution == 'RedHat'
+  with_items:
+    - "subscription-manager remove --all"
+    - "subscription-manager unregister"
+    - "subscription-manager clean"
+

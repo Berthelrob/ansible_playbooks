@@ -1,0 +1,11 @@
+---
+- name: Configura novas maquinas linux a partir de um template
+  hosts: "{{ nome_maquina }}"
+  become: true
+    
+  vars_files:
+    - configurar-nova-vm/vars/main.yml
+  roles:
+    - configurar-nova-vm-com-gnome
+...
+

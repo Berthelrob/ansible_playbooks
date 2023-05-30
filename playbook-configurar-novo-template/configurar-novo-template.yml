@@ -1,0 +1,12 @@
+---
+- name: Configura novas maquinas linux a partir de um template
+  hosts: template
+  become: true
+
+  vars_files:
+    - configurar-novo-template/vars/main.yml
+    - configurar-novo-template/vars/secret.yml
+  roles:
+    - configurar-novo-template
+...
+
